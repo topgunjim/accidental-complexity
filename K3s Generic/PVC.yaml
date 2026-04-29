@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: yourUniqueName
+  namespace: pihole
+spec:
+  accessModes:
+    - ReadWriteMany # Allows multiple nodes to access the SSD simultaneously
+  storageClassName: "yourSClassName" # Matches your provisioner's name which you provided in the nfsp values YAML
+  resources:
+    requests:
+      storage: 5Gi # Matches the size in your nfsp values YAML
