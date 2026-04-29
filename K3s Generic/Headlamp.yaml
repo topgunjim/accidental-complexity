@@ -1,0 +1,20 @@
+config:
+  clusters:
+    - name: "your-cluster-name"
+      server: "https://cluster.local"
+
+service:
+  type: LoadBalancer
+  port: 80
+
+# Force Headlamp onto an 8GB node for stability and performance
+nodeSelector:
+  capacity: max
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 1Gi
