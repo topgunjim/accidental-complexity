@@ -1,0 +1,27 @@
+# NFS Subdir External Provisioner — Helm values
+#
+# Install with:
+#   helm repo add nfs-subdir-external-provisioner \
+#     https://kubernetes-sigs.github.io/nfs-subdir-external-provisioner/
+#   helm repo update
+#   helm install nfs-provisioner \
+#     nfs-subdir-external-provisioner/nfs-subdir-external-provisioner \
+#     -f nfs-provisioner-values.yaml \
+#     -n kube-system
+#
+# After install, patch mount options:
+#   kubectl patch storageclass cluster-nfs-client -p \
+#     '{"mountOptions": ["nfsvers=4.1","nolock","soft","noac"]}'
+
+nfs:
+  server: xxx.xxx.xxx.211  # Your head node's IP
+  path: /mnt/ssd/your-K3s-common-data-folder
+  mountOptions:
+    - nfsvers=4.1
+
+storageClass:
+  name: yourUniqueName       # The name you'll use in your app configs
+  defaultClass: true         # Makes this the primary storage for the cluster
+  reclaimPolicy: Retain
+  archiveOnDelete: false     # Deletes data from SSD when you delete a PVC
+  allowVolumeExpansion: true
