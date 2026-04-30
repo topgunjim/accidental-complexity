@@ -1,0 +1,165 @@
+# Pi-hole StatefulSet — 2 replicas, each with its own isolated PVC.
+# pihole-0 — primary (admin UI, Nebula Sync source)
+# pihole-1 — secondary (serves DNS, receives Nebula Sync)
+#
+# FTL configuration is managed in 02-pihole-config.yaml (ConfigMap).
+# Only secrets and static pod config live here.
+
+---
+# Headless Service — required by StatefulSet for stable pod DNS.
+# Gives each pod a predictable DNS name inside the cluster:
+#   pihole-0.pihole-headless.pihole.svc.cluster.local
+#   pihole-1.pihole-headless.pihole.svc.cluster.local
+# Nebula Sync uses these to reach each pod's API independently.
+apiVersion: v1
+kind: Service
+metadata:
+  name: pihole-headless
+  namespace: pihole
+  labels:
+    app.kubernetes.io/name: pihole
+spec:
+  clusterIP: None
+  selector:
+    app.kubernetes.io/name: pihole
+  ports:
+    - name: http
+      port: 80
+      targetPort: 80
+
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: pihole
+  namespace: pihole
+  labels:
+    app.kubernetes.io/name: pihole
+spec:
+  serviceName: pihole-headless
+  replicas: 2
+  podManagementPolicy: OrderedReady
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      # pihole-1 updates first, then pihole-0.
+      # pihole-0 (primary/UI) is always last to restart.
+      partition: 0
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: pihole
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: pihole
+    spec:
+      # Pin to 4GB+ nodes only
+      nodeSelector:
+        capacity: med
+
+      # Each pod must land on a different node
+      # Also prefer to avoid nodes running dnscrypt-proxy
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  app.kubernetes.io/name: pihole
+              topologyKey: kubernetes.io/hostname
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: dnscrypt-proxy
+                topologyKey: kubernetes.io/hostname
+
+      # Inject DNSCrypt ClusterIP into /etc/hosts so Pi-hole can resolve
+      # the service name without relying on DNS (chicken-and-egg fix).
+      # NOTE: If DNSCrypt service is ever recreated, update this IP.
+      hostAliases:
+        - ip: "<<Your DNSCrypt ClusterIP>>"
+          hostnames:
+            - "dnscrypt-proxy.pihole.svc.cluster.local"
+
+      terminationGracePeriodSeconds: 30
+
+      volumes:
+        # FTL and gravity databases on local node storage.
+        # Avoids NFS SQLite locking issues entirely.
+        # Data is ephemeral — lost on pod restart (acceptable).
+        - name: pihole-db
+          emptyDir: {}
+
+      containers:
+        - name: pihole
+          image: pihole/pihole:latest
+          imagePullPolicy: IfNotPresent
+
+          # FTL settings loaded from ConfigMap (02-pihole-config.yaml)
+          envFrom:
+            - configMapRef:
+                name: pihole-config
+
+          # Secrets and runtime-required values stay here
+          env:
+            - name: DNSMASQ_USER
+              value: "root"
+            - name: FTLCONF_webserver_api_password
+              valueFrom:
+                secretKeyRef:
+                  name: pihole-secret
+                  key: password
+
+          ports:
+            - containerPort: 53
+              protocol: UDP
+            - containerPort: 53
+              protocol: TCP
+            - containerPort: 80
+              protocol: TCP
+
+          volumeMounts:
+            - name: pihole-data
+              mountPath: /etc/pihole
+            - name: pihole-db
+              mountPath: /db
+
+          readinessProbe:
+            httpGet:
+              path: /admin/login
+              port: 80
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            failureThreshold: 4
+
+          livenessProbe:
+            httpGet:
+              path: /admin/login
+              port: 80
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            failureThreshold: 6
+
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 384Mi
+
+  # Per-pod PVC — isolated storage per pod, no concurrent writes.
+  # pihole-data-pihole-0 and pihole-data-pihole-1 are separate PVCs.
+  volumeClaimTemplates:
+    - metadata:
+        name: pihole-data
+        labels:
+          app.kubernetes.io/name: pihole
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        storageClassName: cluster-nfs-client
+        resources:
+          requests:
+            storage: 5Gi
