@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: pihole
+  labels:
+    app.kubernetes.io/name: pihole
+
+
+    # Better option is to do this at the command line using
+    # kubectl create namespace pihole
