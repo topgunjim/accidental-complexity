@@ -1,0 +1,88 @@
+# Pi-hole FTL configuration — managed as a ConfigMap.
+# Edit settings here and apply with:
+#   kubectl apply -f 02-pihole-config.yaml
+#   kubectl rollout restart statefulset/pihole -n pihole
+#
+# Sensitive values (password) remain in 01-secret.yaml.
+# Static values (image, ports, volumes) remain in 04-pihole-statefulset.yaml.
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pihole-config
+  namespace: pihole
+  labels:
+    app.kubernetes.io/name: pihole
+data:
+  TZ: "America/New_York"
+
+  # Upstream DNS — DNSCrypt ClusterIP via hostAliases resolution
+  FTLCONF_dns_upstreams: "dnscrypt-proxy.pihole.svc.cluster.local#15353"
+
+  # Listen on all interfaces — required in Kubernetes pod networking
+  FTLCONF_dns_listeningMode: "all"
+
+  # Enable app_sudo for Nebula Sync API access
+  FTLCONF_webserver_api_app_sudo: "true"
+
+  # Privacy — log full client IPs
+  FTLCONF_misc_privacylevel: "0"
+
+  # Query logging — disabled to reduce NFS writes
+  FTLCONF_dns_queryLogging: "false"
+
+  # Max concurrent DNS queries
+  FTLCONF_misc_dnsmasq_lines: "dns-forward-max=1000"
+
+  # Rate limiting — disabled (Firewalla proxies all .36 traffic through one IP)
+  FTLCONF_dns_rateLimit_count: "0"
+
+  # Exclude cluster-internal and localhost clients from UI
+  FTLCONF_webserver_api_excludeClients: "^10\\.42\\., ^10\\.43\\., ^127\\.0\\.0\\.1$, ^::1$, ^localhost$"
+
+  # Show last 12 hours in UI
+  FTLCONF_webserver_api_maxHistory: "43200"
+
+  # Privacy — don't send client subnet info upstream
+  FTLCONF_dns_EDNS0ECS: "false"
+
+  # Block Apple/Mozilla DNS bypass mechanisms
+  FTLCONF_dns_specialDomains_iCloudPrivateRelay: "true"
+  FTLCONF_dns_specialDomains_mozillaCanary: "true"
+  FTLCONF_dns_specialDomains_designatedResolver: "true"
+
+  # Disable built-in NTP server
+  FTLCONF_ntp_ipv4_active: "false"
+  FTLCONF_ntp_ipv6_active: "false"
+  FTLCONF_ntp_sync_active: "false"
+
+  # Keep network table in sync with database retention
+  FTLCONF_database_network_expire: "8"
+
+  # Exclude noisy service discovery domains from UI
+  FTLCONF_webserver_api_excludeDomains: "[ _dns-sd._udp, _tcp.local, _udp.local ]"
+
+  # Reply REFUSE when busy — clients try next DNS immediately
+  FTLCONF_dns_replyWhenBusy: "REFUSE"
+
+  # DNSSEC handled by dnscrypt-proxy upstream — avoid double validation
+  FTLCONF_dns_dnssec: "false"
+
+  # Block encrypted SNI to prevent DNS bypass
+  FTLCONF_dns_blockESNI: "true"
+
+  # DNS cache size
+  FTLCONF_dns_cache_size: "10000"
+
+  # Database retention
+  FTLCONF_database_maxDBdays: "8"
+
+  # WAL disabled — causes NFS locking issues
+  FTLCONF_database_useWAL: "false"
+
+  # FTL database on emptyDir (local node storage) — not NFS
+  # Avoids SQLite locking issues. Data is ephemeral (lost on restart).
+  FTLCONF_files_database: "/db/pihole-FTL.db"
+
+  # Disable dnsmasq text log file
+  FTLCONF_files_log_dnsmasq: ""
