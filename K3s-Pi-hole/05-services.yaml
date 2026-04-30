@@ -1,0 +1,114 @@
+# Single DNS VIP — both pods serve behind it.
+# externalTrafficPolicy: Local preserves real client IPs (no SNAT).
+# MetalLB only advertises from nodes with a Ready pihole pod.
+apiVersion: v1
+kind: Service
+metadata:
+  name: pihole-dns
+  namespace: pihole
+  labels:
+    app.kubernetes.io/name: pihole
+  annotations:
+    metallb.io/loadBalancerIPs: "<<Your Metallb Load Balancer IP>>"
+spec:
+  type: LoadBalancer
+  externalTrafficPolicy: Local
+  selector:
+    app.kubernetes.io/name: pihole
+  ports:
+    - name: dns-udp
+      port: 53
+      targetPort: 53
+      protocol: UDP
+    - name: dns-tcp
+      port: 53
+      targetPort: 53
+      protocol: TCP
+
+---
+# Admin UI for pihole-0 (primary).
+apiVersion: v1
+kind: Service
+metadata:
+  name: pihole-web-0
+  namespace: pihole
+  labels:
+    app.kubernetes.io/name: pihole
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: pihole
+    statefulset.kubernetes.io/pod-name: pihole-0
+  ports:
+    - port: 80
+      targetPort: 80
+      protocol: TCP
+
+---
+# Admin UI for pihole-1 (secondary).
+apiVersion: v1
+kind: Service
+metadata:
+  name: pihole-web-1
+  namespace: pihole
+  labels:
+    app.kubernetes.io/name: pihole
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: pihole
+    statefulset.kubernetes.io/pod-name: pihole-1
+  ports:
+    - port: 80
+      targetPort: 80
+      protocol: TCP
+
+---
+# Ingress for pihole-0 — http://pihole.lan/admin
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: pihole-web
+  namespace: pihole
+  labels:
+    app.kubernetes.io/name: pihole
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: web
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: "pihole.lan"
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: pihole-web-0
+                port:
+                  number: 80
+
+---
+# Ingress for pihole-1 — http://pihole1.lan/admin
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: pihole-web-1
+  namespace: pihole
+  labels:
+    app.kubernetes.io/name: pihole
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: web
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: "pihole1.lan"
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: pihole-web-1
+                port:
+                  number: 80
