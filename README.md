@@ -4,8 +4,7 @@
 
 ### The files are organized as follows:
 
-**K3s Generic:** These are the YAML files that deal with Headlamp, MetalLB, NFS Subdir External Provisioner, and PersistentVolumeClaim.
-
-**K3s Pihole:** Pi-hole specific YAML, including DNSCrypt-proxy
+**K3s-Pi-hole:** These are the YAML files that deal with Pi-hole, DNSCrypt-proxy, Nebula Sync, NFS Provisioner values etc.
+**K3s-Generic:** Headlamp, MetalLB
 
 **Misc:** Tuning the Pis, Orderely shutdown.
