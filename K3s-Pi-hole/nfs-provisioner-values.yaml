@@ -1,0 +1,30 @@
+# NFS Subdir External Provisioner — Helm values
+#
+# Install with:
+#   helm repo add nfs-subdir-external-provisioner \
+#     https://kubernetes-sigs.github.io/nfs-subdir-external-provisioner/
+#   helm repo update
+#   helm install nfs-provisioner \
+#     nfs-subdir-external-provisioner/nfs-subdir-external-provisioner \
+#     -f nfs-provisioner-values.yaml \
+#     -n kube-system
+#
+# After install, patch mount options:
+#   kubectl patch storageclass cluster-nfs-client -p \
+#     '{"mountOptions": ["nfsvers=4.1","hard"]}'
+
+
+nfs:
+  server: xxx.xxx.xxx.201
+  path: /mnt/ssd/k3s-common
+
+storageClass:
+  name: cluster-nfs-client
+  defaultClass: true           # Makes this the default StorageClass for all PVCs
+  reclaimPolicy: Retain        # PV stays when PVC is deleted — data is safe
+  archiveOnDelete: true        # Renames directory with timestamp instead of deleting
+  allowVolumeExpansion: true   # Allows PVC storage size to be increased later
+
+# Keep it on an 8GB node for stability
+nodeSelector:
+  capacity: max
